@@ -10,12 +10,12 @@ const API_URL = `https://${WIKI_LANG}.wikipedia.org/api/rest_v1/page/random/summ
 const PAGE_URL = title =>
   `https://${WIKI_LANG}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
 
-/* ---------- МОДАЛКА С КОНТЕНТОМ ---------- */
+/* ---------- МОДАЛКА: ПОЛНАЯ СТАТЬЯ ---------- */
 const ArticleModal = ({ article, onClose }) => {
   const [html, setHtml] = useState(null);
   const contentRef = useRef(null);
 
-  /* 1. Загружаем HTML через API parse (обходит CORS) */
+  /* 1. Загружаем всю статью (HTML) */
   useEffect(() => {
     if (!article) return;
 
@@ -28,13 +28,11 @@ const ArticleModal = ({ article, onClose }) => {
 
     fetch(PARSE_URL)
       .then(r => r.json())
-      .then(d =>
-        setHtml((d.parse?.text || 'Статья не найдена.').slice(0, 15000)),
-      )
+      .then(d => setHtml(d.parse?.text || 'Статья не найдена.'))   // ← без обрезки
       .catch(() => setHtml('Не удалось загрузить статью.'));
   }, [article]);
 
-  /* 2. Делаем кнопки «Краткие факты» раскрывающимися */
+  /* 2. Делаем «Краткие факты» раскрывающимися */
   useEffect(() => {
     if (!contentRef.current) return;
     contentRef.current
@@ -43,7 +41,7 @@ const ArticleModal = ({ article, onClose }) => {
         btn.onclick = () => {
           const expanded = btn.getAttribute('aria-expanded') === 'true';
           btn.setAttribute('aria-expanded', !expanded);
-          const next = btn.nextElementSibling;          // блок фактов
+          const next = btn.nextElementSibling;
           if (next) next.style.display = expanded ? 'none' : '';
         };
       });
