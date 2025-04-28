@@ -3,35 +3,51 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Heart, X, ExternalLink } from 'lucide-react';
 
-/* ----- НАСТРОЙКИ ----- */
-const PAGE_BATCH = 10;          // сколько статей загружаем за один «скролл»
-const WIKI_LANG = 'ru';         // язык Википедии
+/* ---------- НАСТРОЙКИ ---------- */
+const PAGE_BATCH = 10;            // статей за «скролл»
+const WIKI_LANG = 'ru';           // язык Википедии
 const API_URL = `https://${WIKI_LANG}.wikipedia.org/api/rest_v1/page/random/summary`;
 const PAGE_URL = title =>
   `https://${WIKI_LANG}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
-/* новый, «облегчённый» endpoint: JSON без лишней верстки */
-const SECTIONS_URL = title =>
-  `https://${WIKI_LANG}.wikipedia.org/api/rest_v1/page/mobile-sections/${encodeURIComponent(title)}`;
 
-/* --------- МОДАЛКА С ТЕКСТОМ СТАТЬИ --------- */
+/* ---------- МОДАЛКА С КОНТЕНТОМ ---------- */
 const ArticleModal = ({ article, onClose }) => {
   const [html, setHtml] = useState(null);
+  const contentRef = useRef(null);
 
+  /* 1. Загружаем HTML через API parse (обходит CORS) */
   useEffect(() => {
     if (!article) return;
+
     setHtml('Загрузка…');
-    fetch(SECTIONS_URL(article.title))
+
+    const PARSE_URL =
+      `https://${WIKI_LANG}.wikipedia.org/w/api.php` +
+      `?action=parse&format=json&prop=text&formatversion=2&origin=*` +
+      `&page=${encodeURIComponent(article.title)}`;
+
+    fetch(PARSE_URL)
       .then(r => r.json())
-      .then(data => {
-        const lead = data.lead?.sections?.[0]?.text ?? '';
-        const body = (data.remaining?.sections || [])
-          .slice(0, 2)                       // показываем первые 2 секции
-          .map(s => `<h2>${s.line}</h2>${s.text}`)
-          .join('');
-        setHtml(lead + body);
-      })
+      .then(d =>
+        setHtml((d.parse?.text || 'Статья не найдена.').slice(0, 15000)),
+      )
       .catch(() => setHtml('Не удалось загрузить статью.'));
   }, [article]);
+
+  /* 2. Делаем кнопки «Краткие факты» раскрывающимися */
+  useEffect(() => {
+    if (!contentRef.current) return;
+    contentRef.current
+      .querySelectorAll('button[aria-expanded]')
+      .forEach(btn => {
+        btn.onclick = () => {
+          const expanded = btn.getAttribute('aria-expanded') === 'true';
+          btn.setAttribute('aria-expanded', !expanded);
+          const next = btn.nextElementSibling;          // блок фактов
+          if (next) next.style.display = expanded ? 'none' : '';
+        };
+      });
+  }, [html]);
 
   if (!article) return null;
 
@@ -45,6 +61,7 @@ const ArticleModal = ({ article, onClose }) => {
         <h1 className="text-2xl font-bold leading-tight">{article.title}</h1>
 
         <article
+          ref={contentRef}
           className="prose max-w-none"
           dangerouslySetInnerHTML={{ __html: html }}
         />
@@ -59,7 +76,7 @@ const ArticleModal = ({ article, onClose }) => {
   );
 };
 
-/* --------- КАРТОЧКА В ЛЕНТЕ --------- */
+/* ---------- КАРТОЧКА В ЛЕНТЕ ---------- */
 const WikiCard = ({ article, onRead }) => {
   const [liked, setLiked] = useState(false);
 
@@ -99,7 +116,7 @@ const WikiCard = ({ article, onRead }) => {
   );
 };
 
-/* --------- ЛЕНТА --------- */
+/* ---------- ЛЕНТА СТАТЕЙ ---------- */
 const WikipediaFeed = () => {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -111,7 +128,7 @@ const WikipediaFeed = () => {
     setLoading(true);
     try {
       const batch = Array.from({ length: PAGE_BATCH }).map(() =>
-        fetch(API_URL).then(r => r.json())
+        fetch(API_URL).then(r => r.json()),
       );
       const results = await Promise.all(batch);
       setArticles(prev => [...prev, ...results]);
@@ -126,7 +143,7 @@ const WikipediaFeed = () => {
   useEffect(() => {
     const obs = new IntersectionObserver(
       e => e[0].isIntersecting && !loading && fetchArticles(),
-      { threshold: 1 }
+      { threshold: 1 },
     );
     if (loaderRef.current) obs.observe(loaderRef.current);
     return () => obs.disconnect();
